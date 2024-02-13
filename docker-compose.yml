@@ -1,0 +1,159 @@
+version: "3"
+
+services:
+
+  registry:
+    image: registry:2.8.3
+    ports:
+      - 5000:5000
+    profiles: [registry]
+
+  php:
+    build: _php
+    image: ${D_REG}${PROJ_KEY}/php:latest
+    restart: on-failure
+    volumes:
+      - ./_php/php.ini-production:/usr/local/etc/php/php.ini:ro
+      - ./_php/www.conf:/usr/local/etc/php-fpm.d/www.conf:ro
+      - ./_php/app:/app
+    profiles: [reference]
+
+  mysql:
+    build: _mysql
+    image: ${D_REG}${PROJ_KEY}/mysql:latest
+    restart: always
+    ports: [33060:3306]
+    environment:
+      - MYSQL_ROOT_PASSWORD
+      - MYSQL_DATABASE
+      - MYSQL_USER
+      - MYSQL_PASSWORD
+      - MYSQL_INITDB_SKIP_TZINFO
+    volumes:
+      - mysql:/var/lib/mysql
+    profiles: [stage]
+
+  wordpress:
+    build: 
+      context: wordpress
+      args:
+        - WP_DIR=${WP_DIR}
+    image: ${D_REG}${PROJ_KEY}/wordpress:latest
+    #depends_on: [mysql]
+    restart: on-failure
+    volumes:
+      - wordpress:${WP_DIR}
+    profiles: [stage]
+
+  laravel:
+    build: 
+      context: laravel
+      args:
+        - LARA_DIR=${LARA_DIR}
+    image: ${D_REG}${PROJ_KEY}/laravel:latest
+    depends_on: [mysql]
+    restart: on-failure
+    volumes:
+      - laravel:${LARA_DIR}
+    profiles: [stage]
+
+  nginx:
+    build: 
+      context: _nginx
+      args:
+        - PROJ_DOMAIN=${PROJ_DOMAIN}
+    image: ${D_REG}${PROJ_KEY}/nginx:latest
+    depends_on: [apache, jekyll]
+    ports: [443:443, 80:80]
+    environment:
+      - NGINX_ENVSUBST_TEMPLATE_SUFFIX
+      - PROJ_DOMAIN
+      - LARA_PUBLIC
+      - WP_DIR
+    volumes:
+      - ./_nginx/ssl:/etc/nginx/ssl:ro
+      - ./_nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./_nginx/templates:/etc/nginx/templates:ro
+      - laravel:${LARA_DIR}
+      - wordpress:${WP_DIR}:ro
+    profiles: [stage]
+
+  apache:
+    build: 
+      context: _apache
+      args:
+        - proj_domain=${PROJ_DOMAIN}
+    image: ${D_REG}${PROJ_KEY}/apache:latest
+    depends_on: [laravel, wordpress]
+    restart: always
+    environment:
+      - PROJ_DOMAIN
+      - LARA_PUBLIC
+      - WP_DIR
+    volumes:
+      - ./_apache/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro
+      - ./_apache/httpd-vhosts.conf:/usr/local/apache2/conf/extra/httpd-vhosts.conf:ro
+      - laravel:${LARA_DIR}
+      - wordpress:${WP_DIR}:ro
+    profiles: [stage]
+
+  wptools:
+    build: .dev/wptools
+    image: ${D_REG}${PROJ_KEY}/wptools:latest
+    depends_on: [wordpress, mysql]
+    volumes:
+      - ./.dev/wptools/sbin:/usr/local/sbin
+      - wp_backups:/tmp/backups
+      - wordpress:/tmp/wordpress
+      - ./.dev/wptools/wp.gitignore:/tmp/.gitignore
+    command: sh -c "tail -f /dev/null"
+    environment:
+      - PAGER='busybox more'
+      - WP_CLI_ALLOW_ROOT=1
+    profiles: [stage]
+
+  jekyll:
+    build: jekyll
+    image: ${D_REG}${PROJ_KEY}/jekyll:latest
+    restart: on-failure
+    volumes:
+      - ./jekyll/docs:/srv/jekyll
+      - ./jekyll/vendor/bundle:/usr/local/bundle
+    ports:
+      - "4000:4000"
+    command: jekyll serve --force_polling --drafts
+    profiles: [stage]
+
+  jenkins:
+    build: .dev/jenkins
+    image: ${D_REG}${PROJ_KEY}/jenkins:latest
+    #image: ${PROJ_KEY}/jenkins:${APP_ENV}${APP_VERSION}
+    restart: on-failure
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      #- /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 8080:8080
+      - 50000:50000
+    profiles: [test]
+
+volumes:
+  mysql:
+    name: ${VOL_PREFIX}-mysql
+    external: true
+  laravel:
+    name: ${VOL_PREFIX}-laravel
+    external: true
+  wordpress:
+    name: ${VOL_PREFIX}-wordpress
+    external: true
+  jenkins_home:
+    name: ${VOL_PREFIX}-jenkins_home
+    external: true
+  wp_backups:
+    name: ${VOL_PREFIX}-wp_backups
+    external: true
+
+networks:
+  monitoring:
+    driver: bridge

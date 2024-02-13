@@ -1,0 +1,18 @@
+[submodule ".dev/certs"]
+	path = .dev/certs
+	url = git@github.com:paoloumali/mkcert-stunnel.git
+[submodule ".dev/wptools"]
+	path = .dev/wptools
+	url = git@github.com:paoloumali/util-wptools.git
+[submodule ".dev/jenkins"]
+	path = .dev/jenkins
+	url = git@github.com:huenits/jenkins.git
+[submodule ".dev/helper-scripts"]
+	path = .dev/helper-scripts
+	url = git@github.com:paoloumali/dev-helper-scripts.git
+[submodule "wordpress"]
+	path = wordpress
+	url = git@github.com:huenits/wordpress.git
+[submodule "laravel"]
+	path = laravel
+	url = git@github.com:huenits/laravel.git

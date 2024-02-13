@@ -1,0 +1,103 @@
+upstream backend {
+    server apache:80;
+}
+
+upstream intradocs {
+    server jekyll:4000;
+}
+
+server {
+    listen 80;
+    listen  [::]:80;
+    server_name ${PROJ_DOMAIN};
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen       443 default_server ssl;
+    listen  [::]:443 default_server ssl;
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+    http2 on;
+
+    server_name  ${PROJ_DOMAIN};
+    root ${LARA_PUBLIC};
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    #location ~ /\. { access_log off; log_not_found off; deny all; }
+    #location ~ ~$ { access_log off; log_not_found off; deny all; }
+
+    # deny access to .htaccess files, if Apache's document root
+    # concurs with nginx's one
+    location ~ /\.ht {
+        deny  all;
+    }
+
+    location ~ \.user.ini$ {
+        deny  all;
+    }
+
+
+    #access_log  /var/log/nginx/host.access.log  main;
+    
+    # proxy the PHP scripts to Apache listening on 127.0.0.1:80
+    #
+    #location ~ \.php$ {
+    #    proxy_pass   http://127.0.0.1;
+    #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+    #    fastcgi_pass   php:9000;
+    #    fastcgi_index  index.php;
+    #    fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+    #    include        fastcgi_params;
+    #}
+
+    location @php {
+        include templates/snippet/apache-proxy;
+    }
+
+    
+    #error_page 403 405 @php;
+    #err pages must be at root always
+    error_page 500 502 503 504 /50x.html;
+    error_page 404 /404.html;
+    error_page 403 /403.html;
+
+    # test throwing error code
+    location /throw-500 {
+        return 500;
+    }
+
+    location /docs/ {
+        proxy_pass http://intradocs/docs/;
+    }
+
+    #location /blog/ {
+    #    try_files _ @php;
+    #}
+
+    # delegate to apache
+    location ~ \.php$ {
+        #include snippets/proxy_pass.conf;
+        try_files _ @php;
+    }
+
+    location / {
+        #try_files $uri $uri/ /index.php?$query_string;
+        try_files $uri = @php;
+    }
+
+    #location / {
+    #    index  index.html index.htm;
+    #}
+
+    #error_page  404              /404.html;
+
+
+
+ 
+}
+
